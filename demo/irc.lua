@@ -3,8 +3,9 @@ gfx.win(385, 380)
 local conf = {
   bg = 1,
   fg = 7,
+  nick = 12,
   border = 0,
-  sel = 12,
+  sel = 11,
 }
 
 gfx.border(conf.border)
@@ -24,20 +25,30 @@ function win.new()
   s.lines = flr(H/h)-1
   s.cols = flr(W/w)
   s.line = 1
-  s.text = {{}}
+  s.text = {{user={}, msg={}}}
   s.spw, s.sph = w, h
   setmetatable(s, win)
   return s
 end
 
-function win:write(f, ...)
+function win:write(u, f, ...)
   local s = self
-  local t = utf.chars(fmt(f.."\n", ...):gsub("\r",""))
-  local l = s.text[#s.text]
+  local t
+  if #u > 0 then
+    t = utf.chars(fmt(":"..f.."\n", ...):gsub("\r",""))
+  else
+    t = utf.chars(fmt(f.."\n", ...):gsub("\r",""))
+  end
+  local l = s.text[#s.text].msg
+  local us = s.text[#s.text].user
+  for _, c in ipairs(utf.chars(u)) do
+    add(us, c)
+  end
   for _,c in ipairs(t) do
-    if c == '\n' or #l >= s.cols then
+    if c == '\n' or #l+#us >= s.cols then
       l = {}
-      add(s.text, l)
+      us = {}
+      add(s.text, {user=us, msg=l})
     end
     if c ~= '\n' then
       add(l, c)
@@ -66,11 +77,11 @@ function win:copy()
   local nr = 0
   local txt = ''
   for k = y1, y2 do
-    for x = 1, s.text[k] and #s.text[k] or 0 do
+    for x = 1, s.text[k].msg and #s.text[k].msg or 0 do
       if k == y1 and x >= x1 or k == y2 and x <= x2 or
         k > y1 and k < y2 then
         if y1 ~= y2 or (x >= x1 and x <= x2) then
-          txt = txt .. s.text[k][x]
+          txt = txt .. s.text[k].msg[x]
         end
       end
     end
@@ -88,15 +99,22 @@ function win:show()
   local nr = 0
   local x1, y1, x2, y2 = s:getsel()
   for k = s.line, #s.text do
-    for x = 1, #s.text[k] do
-      if k == y1 and x >= x1 or k == y2 and x <= x2 or
+    for x = 1, #s.text[k].user do
+      gfx.print(s.text[k].user[x], (x-1)*s.spw+1, nr*s.sph+1, 0)
+      gfx.print(s.text[k].user[x], (x-1)*s.spw, nr*s.sph, conf.nick)
+    end
+
+    for x = 1, #s.text[k].msg do
+      if k == y1 and x+#s.text[k].user >= x1 or k == y2 and x+#s.text[k].user <= x2 or
         k > y1 and k < y2 then
-        if y1 ~= y2 or (x >= x1 and x <= x2) then
-          screen:clear((x-1)*s.spw, nr*s.sph, s.spw, s.sph, conf.sel)
+        if y1 ~= y2 or (x+#s.text[k].user >= x1 and x+#s.text[k].user <= x2) then
+          screen:clear((x+#s.text[k].user-1)*s.spw, nr*s.sph, s.spw, s.sph, conf.sel)
         end
       end
-      gfx.print(s.text[k][x], (x-1)*s.spw+1, nr*s.sph+1, 0)
-      gfx.print(s.text[k][x], (x-1)*s.spw, nr*s.sph, conf.fg)
+      gfx.print(s.text[k].msg[x], (x-1+#s.text[k].user
+)*s.spw+1, nr*s.sph+1, 0)
+      gfx.print(s.text[k].msg[x], (x-1+#s.text[k].user
+)*s.spw, nr*s.sph, conf.fg)
     end
     nr = nr + 1
   end
@@ -167,7 +185,7 @@ local thr = thread.start(function()
   print("thread finished")
 end)
 
-buf:write("Connecting to %s:%d...",
+buf:write("", "Connecting to %s:%d...",
   HOST, PORT)
 buf:show() gfx.flip()
 
@@ -176,9 +194,9 @@ thr:write(NICK, HOST, PORT)
 local r = thr:read()
 
 if r then
-  buf:write("connected\n")
+  buf:write("", "connected\n")
 else
-  buf:write("error\n")
+  buf:write("", "error\n")
 end
 
 buf:show() gfx.flip()
@@ -196,34 +214,34 @@ function win:newline()
   table.remove(a, 1)
   if cmd == ':s' then
     self.channel = a[1] or ''
-    self:write("Default channel: %s\n", self.channel)
+    self:write("", "Default channel: %s\n", self.channel)
     self.channel = self.channel ~= '' and self.channel or false
   elseif cmd == ':m' and a[1] then
     local s = inp:find(a[1], 4, true)
     local txt = inp:sub(s+a[1]:len()+1):strip()
     local m = "PRIVMSG "..a[1].." :"..txt
     thr:write('send', m)
-    self:write("%s\n", m)
+    self:write("", "%s\n", m)
   elseif cmd == ':j' and a[1] then
     local c = a[1]
     local m = "JOIN "..c
     thr:write('send', m)
-    self:write("%s\n", m)
+    self:write("", "%s\n", m)
   elseif cmd == ':l' then
     local c = a[1] or self.channel
     if c then
       if c == self.channel then self.channel = nil end
       local m = "PART "..c.." :bye!"
       thr:write('send', m)
-      self:write("%s\n", m)
+      self:write("", "%s\n", m)
     end
   elseif self.channel then
     local m = "PRIVMSG "..self.channel.." :"..inp
     thr:write('send', m)
-    self:write("%s:%s\n", NICK, inp)
+    self:write(NICK, "%s\n", inp)
   else
     thr:write('send', inp)
-    self:write("%s\n", inp)
+    self:write("", "%s\n", inp)
   end
   self.inp = ''
 end
@@ -289,15 +307,15 @@ function irc_rep(v)
     return
   elseif cmd == 'PRIVMSG' then
     if buf.channel == par then
-      return string.format("%s:%s\n", user, txt)
+      return user, string.format("%s\n", txt)
     else
-      return string.format("%s@%s:%s\n", par, user, txt)
+      return string.format("%s@%s", par, user), string.format("%s\n", txt)
     end
   end
   if cmd == "NICK" and user == NICK then
     NICK = txt
   end
-  return string.format("%s", txt) --%s(%s):%s", cmd, par, txt)
+  return "", string.format("%s", txt) --%s(%s):%s", cmd, par, txt)
 end
 
 local HELP = [[
@@ -368,9 +386,9 @@ while r do
   end
   if thr:poll() then
     e, v = thr:read()
-    v = irc_rep(v)
+    u, v = irc_rep(v)
     if v then
-      buf:write("%s\n", v)
+      buf:write(u, "%s\n", v)
     end
     if not e then
       break
