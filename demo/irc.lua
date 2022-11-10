@@ -1,9 +1,13 @@
+sys.title("ReIRC")
 gfx.win(385, 380)
 local conf = {
-  bg = 16,
-  fg = 0,
+  bg = 1,
+  fg = 7,
+  border = 0,
   sel = 12,
 }
+
+gfx.border(conf.border)
 
 local W, H = screen:size()
 local win = {}
@@ -28,7 +32,7 @@ end
 
 function win:write(f, ...)
   local s = self
-  local t = utf.chars(fmt(f, ...):gsub("\r",""))
+  local t = utf.chars(fmt(f.."\n", ...):gsub("\r",""))
   local l = s.text[#s.text]
   for _,c in ipairs(t) do
     if c == '\n' or #l >= s.cols then
@@ -91,6 +95,7 @@ function win:show()
           screen:clear((x-1)*s.spw, nr*s.sph, s.spw, s.sph, conf.sel)
         end
       end
+      gfx.print(s.text[k][x], (x-1)*s.spw+1, nr*s.sph+1, 0)
       gfx.print(s.text[k][x], (x-1)*s.spw, nr*s.sph, conf.fg)
     end
     nr = nr + 1
@@ -105,9 +110,7 @@ function win:show()
     gfx.print(t[i], x, y, conf.fg)
     x = x + s.spw
   end
-  if flr(sys.time()*4) % 2 == 1 then
-    screen:fill_rect(x, y, x + s.spw, y + s.sph, conf.fg)
-  end
+  screen:fill_rect(x, y, x + s.spw, y + s.sph, conf.fg)
 end
 
 function win:scroll(delta)
